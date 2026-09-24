@@ -1,0 +1,41 @@
+# {{PROJECT_NAME}} — docs build & deploy (julia-library archetype)
+#
+# Fails LOUD while docs/ is absent: a declared `docs-site` capability with
+# no build is a defect (criterion 5.2.6, na-honesty). Once
+# docs/Project.toml + docs/make.jl + docs/src/ exist, this builds and
+# deploys via julia-actions/julia-docdeploy (canonical action, verified
+# 2026-09-19: main = 9bff73f68f6a2aa952c8856564f3bd4aea155c15).
+#
+# Pin posture (estate ruling R2 / D38-D39): symbolic refs, pinned by
+# .github/workflows/actions.lock. Regenerate the lock in the same PR as
+# any uses: change.
+
+name: Docs
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  docs:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Layout gate — fail loud while docs/ is absent
+        run: |
+          if [ ! -f docs/Project.toml ] || [ ! -f docs/make.jl ] || [ ! -d docs/src ]; then
+            echo "::error::docs-site declared but no Documenter build: docs/Project.toml, docs/make.jl and docs/src/ are required. Either add the build or drop the docs-site capability from rsr-profile.a2ml."
+            exit 1
+          fi
+      - uses: julia-actions/setup-julia@v3.0.2
+        with:
+          version: "1"
+      - uses: julia-actions/cache@v2
+      # PIN-ME: resolve and lock this in the first estate pass (4.1.3
+      # stays loud until pinned). Ref resolved 2026-09-19.
+      - uses: julia-actions/julia-buildpkg@v1
+      - uses: julia-actions/julia-docdeploy@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

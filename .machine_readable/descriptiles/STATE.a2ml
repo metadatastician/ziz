@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: MPL-2.0
+# Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+#
+# STATE.a2ml — Project state checkpoint (META-TEMPLATE)
+#
+# This is the STATE file for rsr-template-repo itself.
+# When consumed by a new project, replace {{PLACEHOLDER}} tokens
+# and customize sections below for the target project.
+
+[metadata]
+project = "rsr-template-repo"
+version = "0.3.0"
+last-updated = "2026-09-19"
+# status: active | paused | archived | planned
+#   planned — the repo is RESERVED but has not started (minted as a placeholder;
+#             equivalent to CLADE [status] phase = "reserved"). It is NOT
+#             "paused": paused reads as "was active, stopped".
+# AUTHORITY: when this and CLADE [status] phase disagree, CLADE phase is the
+# authoritative SCM checkpoint and STATE must be re-derived from it — never
+# hand-edit both into agreement (standards#726).
+status = "active"
+
+[project-context]
+name = "rsr-template-repo"
+purpose = "Canonical RSR-compliant repository template providing scaffolding for all hyperpolymath projects — including CI/CD, AI manifests, ABI/FFI standards, container ecosystem, and governance infrastructure."
+completion-percentage = 97
+
+[position]
+phase = "maintenance"      # design | implementation | testing | maintenance | archived
+maturity = "production"    # experimental | alpha | beta | production | lts
+
+[route-to-mvp]
+milestones = [
+  { name = "Phase 0: Core scaffolding (justfile, CI/CD, machine-readable)", completion = 100 },
+  { name = "Phase 1: ABI/FFI standard (Idris2/Zig templates)", completion = 100 },
+  { name = "Phase 1b: AI Gatekeeper Protocol (0-AI-MANIFEST.a2ml)", completion = 100 },
+  { name = "Phase 1c: TOPOLOGY.md standard and guide", completion = 100 },
+  { name = "Phase 1d: Maintenance gate (axes, checklist, approach)", completion = 100 },
+  { name = "Phase 1e: Trustfile / contractiles", completion = 100 },
+  { name = "Phase 2: Container ecosystem templates (stapeln)", completion = 100 },
+  { name = "Phase 2b: www/ site-operations bundle + .well-known migration (#53)", completion = 100 },
+  { name = "Phase 2c: Forge & Sustain mechanics — provenance at mint, self-name passes, drift gate, update mechanism (ADR-0003, ratified 2026-09-19)", completion = 100 },
+  { name = "Phase 2d: julia-library archetype overlay + e2e mint test (recon P1.2)", completion = 100 },
+  { name = "Phase 3: Multi-forge sync hardening", completion = 0 },
+  { name = "Phase 4: Guix reproducible shells", completion = 50 },
+  { name = "Phase 4b: RSR oracle dogfood gate in CI (recon P0.2; hypatia M-3 SSOT-path fix is the precondition)", completion = 0 },
+]
+
+[blockers-and-issues]
+# 1. Hypatia M-3: mix hypatia.rsr_score --standards resolves the SSOT at the
+#    pre-reorg path (rhodium-standard-repositories/spec/) — one-line fix
+#    prepared (recon P0.2/01), pending its PR. The dogfood job works around
+#    it with an explicit --ssot until then.
+# 2. Estate-wide actions.lock sweep (D38/D39 ruling 2026-09-19): grace
+#    window closes 2026-10-01; gatekeeper repos first.
+
+[critical-next-actions]
+actions = [
+  "Wire the RSR oracle dogfood job in dogfood-gate.yml (recon P0.2) once the hypatia M-3 fix lands",
+  "Run the estate-wide actions.lock sweep ahead of the 2026-10-01 enforcement date (gatekeeper repos first)",
+  "Rebase rsr-julia-library-template-repo onto this spine (recon P1.3 procedure; ADR-0003 now accepted)",
+  "Validate container templates across wolfi-base and static Chainguard images",
+  "Harden multi-forge sync for GitLab/Bitbucket mirroring edge cases",
+  "Expand Guix development shell templates",
+]
+
+[maintenance-status]
+last-run-utc = "never"
+last-report = "docs/reports/maintenance/latest.json"
+last-result = "unknown"  # unknown | pass | warn | fail
+open-warnings = 0
+open-failures = 0
+
+[ecosystem]
+part-of = ["RSR Framework", "stapeln ecosystem"]
+depends-on = ["stapeln", "selur-compose", "cerro-torre", "svalinn", "vordr", "k9-svc"]
+
+# ---------------------------------------------------------------------------
+# NOTE FOR CONSUMERS: When using this template to create a new repo, reset
+# the fields above to your project's values and replace all {{PLACEHOLDER}}
+# tokens. The milestones above describe the TEMPLATE's evolution, not yours.
+# ---------------------------------------------------------------------------

@@ -1,0 +1,84 @@
+# {{PROJECT_NAME}} — Julia CI (julia-library archetype)
+#
+# Pin posture (estate ruling R2, 2026-09-02; D38/D39 resolution 2026-09-19):
+# symbolic refs here, pinned by .github/workflows/actions.lock (same dir).
+# Refs resolved 2026-09-19 against the estate estate-pins:
+#   actions/checkout@v7.0.1        = 3d3c42e5aac5ba805825da76410c181273ba90b1
+#   julia-actions/setup-julia@v3.0.2 = fa02766e078afaaf09b14210362cee14137e6a32
+#   julia-actions/cache@v2         = a7bed9df697e5d7309d68afe7542a87621a8b6c8
+# Regenerate the lock in the SAME PR as any uses: change (estate MUST).
+
+name: Julia CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+# No `continue-on-error` on a MUST check (R1–R9): a red job is the gate
+# working. Coverage (R4) is reported by the estate's standard coverage
+# upload where present; it is not a blocker at template level.
+jobs:
+  fmt:
+    name: Format (JuliaFormatter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: julia-actions/setup-julia@v3.0.2
+        with:
+          version: "1"
+      - name: Check formatting (check mode — never writes in CI)
+        run: |
+          julia --project=. -e '
+            using Pkg
+            Pkg.add("JuliaFormatter")
+            using JuliaFormatter
+            for f in filter(isfile, Iterators.flatten((
+                [joinpath("src", x) for x in readdir("src")],
+                [joinpath("test", x) for x in readdir("test") if x != "cases"],
+                [joinpath("test", "cases", x) for x in readdir(joinpath("test", "cases"))],
+            )))
+                text = read(f, String)
+                formatted = JuliaFormatter.format_string(text)
+                if text != formatted
+                    @error "not formatted" file=f
+                    exit(1)
+                end
+            end'
+
+  jet:
+    name: Static analysis (JET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: julia-actions/setup-julia@v3.0.2
+        with:
+          version: "1"
+      - uses: julia-actions/cache@v2
+      - name: JET.test_package
+        run: |
+          julia --project=. -e '
+            using Pkg
+            Pkg.add("JET")
+            using JET
+            JET.test_package(path=".", julia_version="1")'
+
+  test:
+    name: Test (Test + Aqua)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The [compat] floor IS tested — an untested floor is an unproven
+        # floor (measured estate gap: Axiology-class repos declare julia 1.9
+        # but test 1.10/1.11 only).
+        julia: ["1.9", "1"]
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: julia-actions/setup-julia@v3.0.2
+        with:
+          version: ${{ matrix.julia }}
+      - uses: julia-actions/cache@v2
+      - name: Pkg.test()
+        run: julia --project=. -e 'using Pkg; Pkg.test()'
