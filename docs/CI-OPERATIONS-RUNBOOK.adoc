@@ -13,8 +13,10 @@ one generic label such as "CodeQL is slow" for those different conditions.
 
 | CodeQL
 | `.github/workflows/codeql.yml`, pull request + main push + monthly schedule.
-  The matrix covers GitHub Actions, JavaScript/TypeScript and Rust. Each matrix
-  entry has a 15-minute job timeout and runs in parallel.
+  On `main` the current matrix still covers Actions only. PR #3 proposes adding
+  JavaScript/TypeScript and Rust; each matrix entry has a 15-minute job timeout
+  and runs in parallel, but that change is not yet merged or validated by a
+  successful PR run.
 | SAST on supported source languages; upload results to GitHub code scanning.
 | The workflow exists, but Code Security must be enabled/entitled for this
   private repo before SARIF results can be published. Live rules also require
@@ -100,11 +102,12 @@ The recent evidence separates three different conditions:
   for the failed analysis was unavailable to this integration; inspect it in
   the Actions UI before attributing the exact step failure to that 403.
 
-The prior workflow matrix analyzed only `actions`, despite this repository
-containing `scripts/check-action-pinning.js` and standalone Rust tools. The
-matrix now covers `actions`, `javascript-typescript`, and `rust`, in three
-parallel no-build jobs. Idris source is not included in CodeQL's supported
-language set and must not be represented as covered by this workflow.
+The live `main` workflow matrix analyzes only `actions`, despite this repository
+containing `scripts/check-action-pinning.js` and standalone Rust tools. PR #3
+proposes covering `actions`, `javascript-typescript`, and `rust` in three
+parallel no-build jobs. That candidate configuration is not yet merged or
+validated by a successful PR workflow. Idris source is not included in CodeQL's
+supported language set and must not be represented as covered by this workflow.
 
 CodeQL languages are independently supported on GitHub; ensure the chosen
 language identifiers and no-build modes remain supported when upgrading the
