@@ -24,12 +24,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Default to `actions` — scaffolded repos rarely have JS/TS
-          # failures on every CodeQL run. The `actions` extractor scans
-          # workflow files which every repo has. Override per-repo if
-          # the scaffolded project actually contains JS/TS code.
+          # This repository contains all three supported surfaces below:
+          # workflow definitions, a JavaScript pin-check helper, and standalone
+          # Rust maintenance tools. Scan each; `none` is appropriate because
+          # these sources do not require a build for CodeQL extraction.
+          # Other source languages (for example Idris) need their own tests or
+          # analyzers; do not imply CodeQL covers unsupported languages.
           # Per hypatia rule `codeql_language_matrix_mismatch`.
           - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+          - language: rust
             build-mode: none
     steps:
       - name: Checkout

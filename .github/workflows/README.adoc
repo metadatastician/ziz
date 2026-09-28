@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 = GitHub Workflows — what runs, and why some look duplicated
 
-This directory holds the repo's CI/CD. A few workflows *look* like they overlap
-but are deliberately distinct — documented here so the apparent duplication is
-not "tidied away" into a real coverage gap.
+This directory holds the repo's CI/CD. See `docs/CI-OPERATIONS-RUNBOOK.adoc`
+for the tool/app inventory, owner-only integration settings, and a runbook for
+separating queue, startup, analysis and result-ingestion delays. A few workflows
+*look* like they overlap but are deliberately distinct — documented here so the
+apparent duplication is not "tidied away" into a real coverage gap.
 
 == Hypatia runs in two places (on purpose)
 
