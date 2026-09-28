@@ -1,0 +1,182 @@
+// SPDX-License-Identifier: MPL-2.0
+= CI, security and deployment operations
+
+This runbook distinguishes a scanner taking time from a workflow that is queued,
+not starting, failing during analysis, or unable to publish results. Do not use
+one generic label such as "CodeQL is slow" for those different conditions.
+
+== What is configured in this repository
+
+[cols="1,2,2,2",options="header"]
+|===
+| Tool / app | Current configuration | Intended role | Current caveat
+
+| CodeQL
+| `.github/workflows/codeql.yml`, pull request + main push + monthly schedule.
+  The matrix covers GitHub Actions, JavaScript/TypeScript and Rust. Each matrix
+  entry has a 15-minute job timeout and runs in parallel.
+| SAST on supported source languages; upload results to GitHub code scanning.
+| The workflow exists, but Code Security must be enabled/entitled for this
+  private repo before SARIF results can be published. Live rules also require
+  CodeQL results. Verify both the feature setting and a successful uploaded
+  analysis; a green workflow alone is not enough if no result was ingested.
+
+| Rust CI
+| `.github/workflows/rust-ci.yml` calls the pinned shared workflow in
+  `hyperpolymath/standards`.
+| Build/test validation for Rust.
+| It is distinct from CodeQL: tests do not replace SAST, and SAST does not
+  replace tests.
+
+| CodeRabbit
+| External PR check (not defined by a workflow in this repository).
+| AI-assisted review feedback.
+| It has reported success on the current PR. Treat it as advisory review, not a
+  substitute for human ownership or deterministic tests.
+
+| GitGuardian
+| External PR check.
+| Secret detection / policy check.
+| It has reported success on the current PR. The in-repo secret-scanner workflow
+  is a separate gitleaks-based check; local pre-push TruffleHog is another tier.
+
+| Semgrep
+| External `semgrep-cloud-platform/scan` PR check.
+| Additional static analysis.
+| It has reported success on the current PR. Verify which rules and languages
+  the connected project actually scans; don't infer this from the check name.
+
+| Hypatia
+| `hypatia-scan.yml` and the `static-analysis-gate.yml` reusable/local jobs.
+| Estate-specific security/static rules; one path also deposits findings for
+  the fleet-learning consumer.
+| These are two consumers by design, not duplicate analysis to collapse.
+
+| SonarCloud
+| `sonarqube.yml` plus `sonar-project.properties`.
+| Complementary quality/security analysis on the configured source surface.
+| The workflow documents that it skips the CI scanner when `SONAR_TOKEN` is
+  absent and expects SonarCloud automatic analysis separately. Verify the
+  SonarCloud project and its own check/analysis timestamp; a skipped workflow
+  must not be reported as an executed scan.
+
+| Dependabot
+| `.github/dependabot.yml` and `.github/workflows/dependabot-automerge.yml`.
+| Dependency update and security PRs; the workflow only considers low/moderate
+  security patch/minor updates for automatic approval/merge.
+| Native auto-merge is disabled in the live repository, so the final automation
+  cannot currently complete. Before enabling it, ensure CodeQL and the required
+  checks can actually report and that the severity gate has been tested.
+
+| OSSF Scorecard
+| `.github/workflows/scorecard.yml`, scheduled daily and manual.
+| Repository supply-chain posture score and SARIF output.
+| Confirm the run and SARIF ingestion separately; schedule frequency is not a
+  substitute for PR tests.
+
+| Pages / Release / container
+| `pages.yml` deploys from `main`; `release.yml` reacts to `v*` tags; the
+  container workflow is opt-in through `CONTAINER_CI=true` and an owned runner.
+| Website deployment, tagged releases/provenance, and opt-in container build.
+| There is no long-running application service in this repository. Treat Pages
+  and tagged releases as the deployment surfaces; container CI is intentionally
+  off until its runner and variables are configured.
+|===
+
+== CodeQL: current diagnosis and change
+
+The recent evidence separates three different conditions:
+
+. PR #3 CodeQL run `36409629916` was `startup_failure`, attributed to
+  `arena-ai-coding-agent[bot]`, with zero jobs. This is not a slow query.
+. The post-merge main run `36405799171` did start: setup, checkout, and
+  initialization succeeded; `Perform CodeQL Analysis` failed. It ran from
+  09:48:12 to 09:51:08 UTC (about three minutes total), not hours.
+. The GitHub code-scanning analyses API returns HTTP 403 with
+  `Code Security must be enabled for this repository to use code scanning`.
+  The active `EstateBranching` ruleset nevertheless requires CodeQL results at
+  `high_or_higher`. This is a configuration/entitlement deadlock until the
+  owner enables Code Security or changes the policy intentionally. The run log
+  for the failed analysis was unavailable to this integration; inspect it in
+  the Actions UI before attributing the exact step failure to that 403.
+
+The prior workflow matrix analyzed only `actions`, despite this repository
+containing `scripts/check-action-pinning.js` and standalone Rust tools. The
+matrix now covers `actions`, `javascript-typescript`, and `rust`, in three
+parallel no-build jobs. Idris source is not included in CodeQL's supported
+language set and must not be represented as covered by this workflow.
+
+CodeQL languages are independently supported on GitHub; ensure the chosen
+language identifiers and no-build modes remain supported when upgrading the
+pinned CodeQL action. Keep the SHA in `codeql.yml` and the corresponding
+`actions.lock` dependency/workflow edge identical in any future action update.
+
+== How to diagnose a slow or missing run
+
+First separate *queue latency* from *execution time*. For a run ID:
+
+[source,bash]
+----
+R=metadatastician/ziz
+ID=<run-id>
+gh api "repos/$R/actions/runs/$ID" --jq '{event,actor:.actor.login,triggering_actor:.triggering_actor.login,status,created_at,run_started_at,updated_at,conclusion,head_sha,html_url}'
+gh api "repos/$R/actions/runs/$ID/jobs" --jq '.jobs[] | {name,status,conclusion,started_at,completed_at,steps:[.steps[]|{name,conclusion,started_at,completed_at}]}'
+----
+
+Interpretation:
+
+* `queued`/`requested` for a long time, or large gap before `run_started_at`:
+  inspect Actions minutes/billing, concurrency contention, runner availability,
+  approval requirements, workflow enablement and event permissions. This is not
+  CodeQL query execution time.
+* `startup_failure` with zero jobs: inspect the run's event/triggering actor,
+  the Actions workflow validation message, reusable-workflow reachability and
+  `actions.lock` ↔ `uses:` equality. There is no CodeQL analysis to optimize.
+* Jobs start and one step takes a long time: inspect that job's step timings and
+  CodeQL logs. Compare checkout, initialization/database creation, query, and
+  upload separately; inspect languages, query suites, build mode, source volume,
+  generated/test exclusions, and runner resources. Do not reduce query coverage
+  before identifying the expensive stage.
+* Analysis finishes but the run/check stays red or the ruleset stays blocked:
+  distinguish SARIF upload/Code Security entitlement, alert processing, and
+  required-check name mismatches. Verify an analysis exists in the code-scanning
+  API/UI for the exact commit.
+* A check is green but a scan was skipped due to missing secret/token: report it
+  as *not configured*, not *scanned*.
+
+For any report of an overnight/day-long delay, capture the run ID and compare
+creation, job start, step start/end and analysis ingestion timestamps. That
+identifies whether the delay belongs to GitHub's queue, a runner, the analyzer,
+or result processing.
+
+== Recommended gate/deploy layers
+
+* Pull request fast gates: lock-sync, deterministic build/tests, secret scanning,
+  and CodeQL on the supported languages once Code Security is enabled. Keep
+  required checks limited to stable emitted check/job names and test each before
+  adding it to a live ruleset.
+* Advisory PR signals: CodeRabbit and quality/score tools can inform review, but
+  should not block deployment unless their service, policy and failure semantics
+  are understood and reliably available.
+* Main branch: rerun checks on the exact merged SHA and retain the result links.
+  A PR merge is not proof that post-merge scans succeeded.
+* Deployment: configure GitHub Pages' `github-pages` environment restrictions
+  and required reviewers/branch rules in repository settings; protect release
+  tags and ensure a release is made only from a reviewed, passing commit. Those
+  environment/ruleset controls live on GitHub, not in workflow YAML alone.
+  Container CI remains opt-in until an owned runner is present.
+* Runtime: this is a repository/template and static site, not a deployed
+  long-running service. Do not invent runtime monitoring checks where there is
+  no service. Add health/observability checks only when a real deployed target
+  exists.
+
+== Owner actions not available to this integration
+
+The authenticated GitHub App token reports no repository `admin`, `maintain`,
+`push`, or `pull` permission; attempts to delete a branch in the other owner's
+repository returned 403. It cannot enable repository Code Security, alter live
+ruleset/app settings, configure SonarCloud/GitGuardian/Semgrep projects, enable
+native auto-merge, or set deployment-environment restrictions. Those are owner
+or organization administrator settings, not changes that can be made by editing
+this repository. The exact owner actions should be recorded with before/after
+checks once someone with the relevant access applies them.

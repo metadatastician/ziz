@@ -151,10 +151,14 @@ labels:
 # merely describe protection, it re-imposes the deadlock on every push.
 #
 # `contexts` is deliberately EMPTY rather than aspirational. Requiring a check
-# that cannot pass is the same defect as requiring one that cannot report, and
-# on this repo no check can currently run at all: GitHub Actions is billing-
-# blocked for PRIVATE repositories on this account ("The job was not started
-# because recent account payments have failed or your spending limit needs to be
-# increased"), which is why every workflow here fails with zero steps while the
-# estate's public repos run normally. Repopulate this list — one context at a
-# time, each pinned to a job id, each verified green — once Actions can run.
+# that cannot pass is the same defect as requiring one that cannot report. The
+# previous billing-block explanation is stale: on 2026-09-28 a human-triggered
+# push on this private repo started jobs, while PR runs triggered by
+# `arena-ai-coding-agent[bot]` failed at startup with zero jobs (see
+# wordpress-tools#96). Do not treat an Actions billing block as the established
+# current cause. Re-measure the actor, event, queue time and jobs on fresh runs.
+# Separately, the live EstateBranching ruleset requires CodeQL code-scanning
+# results, but GitHub's code-scanning API currently says Code Security must be
+# enabled for this repository. Keep this JSON's check list empty until the
+# corresponding contexts actually report green; then add one verified job id at
+# a time and verify the applied live ruleset independently.
