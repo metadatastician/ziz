@@ -11,10 +11,13 @@
 #   - Triggers on every Dependabot PR.
 #   - Reads the PR's update-type metadata via the dependabot/fetch-metadata
 #     action (no free-text parsing).
-#   - Requires CI to be green before merge (GitHub's auto-merge enforces
-#     required status checks).
-#   - Gates merge behind a severity+ecosystem policy table. Default is
-#     low+medium security updates only.
+#   - Auto-approves and enables auto-merge ONLY for security updates that
+#     are patch/minor AND whose CVSS base score is <= 6.9 (low/moderate).
+#     A single line decides this: `case "$band" in LOW|MODERATE)`.
+#   - Refuses HIGH/CRITICAL (CVSS >= 7.0), major bumps, and all routine
+#     (non-security) updates: those stay OPEN for a human.
+#   - Fails CLOSED. An absent or unreadable CVSS score means "a human
+#     reviews this", never "merge anyway".
 #
 # Why auto-merge on GitHub (not via a bot like rhodibot) is the right
 # layer: GitHub enforces branch protection + required checks natively,
@@ -22,11 +25,32 @@
 # to know anything about ecosystems — GitHub handles the merge mechanics
 # once we approve.
 #
+# ⚠ THE GATE BELOW IS ONLY AS STRONG AS `required_status_checks`.
+#   Auto-merge is safe *because* GitHub refuses to complete the merge until
+#   required checks are green. If the ruleset covering the default branch
+#   declares no required checks, auto-merge completes as soon as the PR
+#   exists — this file becomes the only thing between a bad bump and
+#   `main`. Measured 2026-09-24 on metadatastician/ziz: PR #1 merged with
+#   `Lock Sync Gate`, `Dogfood Gate`, `Governance`, `OpenSSF Compliance`
+#   and `Central Estate CI/CD Audit` ALL red, plus a CodeQL
+#   `startup_failure` (which produces no check run at all). Verify per repo:
+#     gh api repos/$R/rulesets --jq '.[] | select(.target=="branch") | .id' \
+#       | xargs -I{} gh api repos/$R/rulesets/{} \
+#       | jq -r '.rules[] | select(.type=="required_status_checks") | .parameters.required_status_checks'
+#   An empty list is a check that cannot fail.
+#
+# ⚠ SEVERITY CANNOT BE READ FROM LABELS. An earlier revision of this file
+#   inferred "<= moderate" from the absence of HIGH/CRITICAL labels "added
+#   by Dependabot". Dependabot adds no such labels by default, this estate
+#   defines none, and `dependabot.yml` sets no `labels:` key — so that gate
+#   could never fire, and the step fell through to an unconditional
+#   `action=automerge`. The signal used below is `cvss`, which
+#   fetch-metadata exposes directly from the advisory.
+#
 # Threat model:
 #   - A compromised upstream package with a bogus security advisory
-#     could propose a malicious version bump. Mitigation: require at
-#     least one non-automated reviewer for HIGH+CRITICAL severity
-#     (done below — we explicitly refuse to auto-approve those).
+#     could propose a malicious version bump. Mitigation: patch/minor
+#     only, CVSS ceiling, and HIGH/CRITICAL never auto-approved.
 #   - A compromised Dependabot itself is an Akerlof claim-grounder
 #     problem. Not in scope here; track under
 #     `project_claim_grounders_dual_use_akerlof.md`.
@@ -64,54 +88,79 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       # --- Policy gate -------------------------------------------------------
-      # Outputs from fetch-metadata we care about:
-      #   update-type      → version-update:semver-{patch,minor,major}
-      #   dependency-type  → direct:{development,production} | indirect
-      #   alert-state      → AUTO_DISMISSED | DISMISSED | FIXED | OPEN
-      #   ghsa-id          → GHSA-... if this is a security PR
-      # --- Policy -------------------------------------------------------------
-      # AUTO-APPROVE + AUTO-MERGE when:
+      # AUTO-APPROVE + AUTO-MERGE only when ALL of:
       #   1. This is a SECURITY update (ghsa-id present), AND
-      #   2. Update is patch or minor, AND
-      #   3. Severity ≤ moderate (Dependabot doesn't expose severity
-      #      directly in fetch-metadata; infer from the absence of
-      #      HIGH/CRITICAL labels added by Dependabot).
-      # Otherwise: do nothing. Human reviews HIGH+CRITICAL security
-      # updates and all non-security bumps.
+      #   2. Update type is patch or minor, AND
+      #   3. CVSS base score <= 6.9 (low / moderate).
+      # Everything else stays OPEN for a human.  The step is a no-op when the
+      # policy says no — it never approves "by default".
       - name: Decide policy outcome
         id: policy
         env:
           GHSA_ID: ${{ steps.meta.outputs.ghsa-id }}
           UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
-          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          CVSS: ${{ steps.meta.outputs.cvss }}
+          DEPENDENCY_TYPE: ${{ steps.meta.outputs.dependency-type }}
         run: |
           set -euo pipefail
 
-          is_security=false
-          [ -n "$GHSA_ID" ] && is_security=true
+          # CVSS v3.1 base-score bands, per FIRST.
+          # Anything not a plain non-negative number is "unknown".
+          cvss_band() {
+            awk -v s="$1" 'BEGIN {
+              if (s !~ /^[0-9]+(\.[0-9]+)?$/) { print "unknown"; exit }
+              v = s + 0
+              if (v >= 9.0) { print "CRITICAL"; exit }
+              if (v >= 7.0) { print "HIGH";     exit }
+              if (v >= 4.0) { print "MODERATE"; exit }
+              if (v >  0.0) { print "LOW";      exit }
+              print "NONE"
+            }'
+          }
 
-          # Owner policy (deliberate: velocity over caution). Auto-merge EVERY
-          # Dependabot update — patch, minor AND major, security or routine.
-          # Safe because GitHub's auto-merge only COMPLETES once the required
-          # checks (secret-scanner, codeql, hypatia-scan, openssf-compliance,
-          # build/test) are green: a bump that breaks fails CI and the PR stays
-          # OPEN with an email ("oi, it broke") instead of landing on a red
-          # main; a bump that passes lands within minutes with no chasing.
-          # This is preferred over making Dependabot a ruleset BYPASS actor,
-          # which would let bumps skip those very checks (no gate, no signal).
-          echo "action=automerge" >> "$GITHUB_OUTPUT"
-          echo "security=$is_security" >> "$GITHUB_OUTPUT"
-          echo "update_type=$UPDATE_TYPE" >> "$GITHUB_OUTPUT"
-          echo "ghsa=$GHSA_ID" >> "$GITHUB_OUTPUT"
-      - name: Approve PR (if policy allows)
+          action="skip"
+          reason=""
+
+          if [ -z "${GHSA_ID:-}" ]; then
+            reason="routine update, not a security update — a human reviews these"
+          elif [ "${UPDATE_TYPE:-}" != "version-update:semver-patch" ] \
+            && [ "${UPDATE_TYPE:-}" != "version-update:semver-minor" ]; then
+            reason="update type '${UPDATE_TYPE:-unknown}' is not patch/minor"
+          else
+            band=$(cvss_band "${CVSS:-}")
+            # ── The policy decision, in one place ─────────────────────────
+            case "$band" in
+              LOW|MODERATE)
+                action="automerge"
+                reason="security update, ${band} (CVSS ${CVSS}), ${UPDATE_TYPE#version-update:semver-}"
+                ;;
+              unknown)
+                reason="CVSS score unreadable ('${CVSS:-empty}') — failing closed, a human reviews this"
+                ;;
+              *)
+                reason="severity ${band} (CVSS ${CVSS:-n/a}) is outside the low/moderate band — a human reviews this"
+                ;;
+            esac
+          fi
+
+          {
+            echo "action=$action"
+            echo "reason=$reason"
+            echo "cvss=${CVSS:-}"
+            echo "ghsa=${GHSA_ID:-}"
+            echo "update_type=${UPDATE_TYPE:-}"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "policy outcome: $action — $reason"
+      - name: Approve PR (only when the policy allows)
         if: steps.policy.outputs.action == 'automerge'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          REASON: ${{ steps.policy.outputs.reason }}
         run: |
-          gh pr review --approve "$PR_URL" \
-            --body "Auto-approving Dependabot security update (${{ steps.policy.outputs.ghsa }}, ${{ steps.policy.outputs.update_type }}). Policy: low/moderate security patches/minors only."
-      - name: Enable auto-merge (if policy allows)
+          gh pr review --approve "$PR_URL" --body "Auto-approving: ${REASON}"
+      - name: Enable auto-merge (only when the policy allows)
         if: steps.policy.outputs.action == 'automerge'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -121,9 +170,10 @@ jobs:
       - name: Write decision to step summary
         env:
           ACTION: ${{ steps.policy.outputs.action }}
-          IS_SECURITY: ${{ steps.policy.outputs.security }}
-          UPDATE_TYPE: ${{ steps.policy.outputs.update_type }}
+          REASON: ${{ steps.policy.outputs.reason }}
+          CVSS: ${{ steps.policy.outputs.cvss }}
           GHSA: ${{ steps.policy.outputs.ghsa }}
+          UPDATE_TYPE: ${{ steps.policy.outputs.update_type }}
         run: |
           {
             echo "## Dependabot Auto-Merge Decision"
@@ -131,7 +181,8 @@ jobs:
             echo "| Field | Value |"
             echo "|-------|-------|"
             echo "| Policy action | \`$ACTION\` |"
-            echo "| Security update | \`$IS_SECURITY\` |"
-            echo "| Update type | \`$UPDATE_TYPE\` |"
+            echo "| Reason | $REASON |"
+            echo "| CVSS | \`${CVSS:-n/a}\` |"
             echo "| GHSA ID | \`${GHSA:-n/a}\` |"
+            echo "| Update type | \`${UPDATE_TYPE:-n/a}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
