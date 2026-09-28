@@ -25,7 +25,7 @@ be described as existing.
 gh api --method POST \
   -H "Accept: application/vnd.github+json" \
   "/repos/{owner}/{repo}/rulesets" \
-  --input .github/rulesets/tag-protection.json
+  --input .github/rulesets/base.json
 
 # List what is actually in force — the only authoritative answer:
 gh api "/repos/{owner}/{repo}/rulesets" --jq '.[] | "\(.id)\t\(.name)\t\(.enforcement)"'
@@ -33,18 +33,20 @@ gh api "/repos/{owner}/{repo}/rulesets" --jq '.[] | "\(.id)\t\(.name)\t\(.enforc
 # Update an existing ruleset in place (needs its numeric id from the list above):
 gh api --method PUT \
   "/repos/{owner}/{repo}/rulesets/<id>" \
-  --input .github/rulesets/tag-protection.json
+  --input .github/rulesets/base.json
 ----
 
 == Files
 
-`tag-protection.json`:: Makes release tags immutable — blocks tag creation,
-update and deletion, and requires signed tags. `bypass_actors` grants the
-repository *admin* role (`actor_id: 5`) an always-bypass, so a maintainer can
-still cut a release.
+`base.json`:: Canonical branch protection ruleset for the default branch (`~DEFAULT_BRANCH`).
+Enforces required signatures, linear history, squash merge, and deletion/force-push protection
+without unsatisfiable coverage or deadlocking approval requirements.
+
+`Immutable-Tags.json`:: Makes release tags immutable — blocks tag deletion,
+non-fast-forward updates, and overwrites, and requires signed tags.
 
 == Verifying
 
 Do not infer that a ruleset is active because the JSON is present. Check with the
 `gh api ... /rulesets` list above. A ruleset that exists as a file but was never
-POSTed is the tag-protection equivalent of a check that cannot fail.
+POSTed is the protection equivalent of a check that cannot fail.
