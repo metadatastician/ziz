@@ -101,3 +101,21 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 [optional footer]
 ```
+
+### Signed commits
+
+Every commit that reaches the default branch must be signed; a ruleset refuses
+unsigned pushes. Estate policy:
+[SIGNING-POLICY](https://github.com/hyperpolymath/standards/blob/main/docs/SIGNING-POLICY.adoc).
+
+- **People and interactive agents** sign with an SSH key registered on GitHub
+  as a *signing* key (`gpg.format=ssh`, `user.signingkey=<key>.pub`,
+  `commit.gpgsign=true`). The committer email must be verified on that account.
+- **Apps, bots and workflows** never `git push` local commits. They write
+  through the API (`createCommitOnBranch` or the estate `signed-push` action)
+  so that GitHub signs each commit.
+- Check the active GitHub configuration before choosing a merge method. The
+  checked-in settings allow squash, merge commits and rebase merges. The
+  checked-in `Base` ruleset targets the default branch and permits squash only,
+  but it is not applied automatically. Do not infer how unsigned PR-branch
+  commits affect merging from this payload.
