@@ -51,7 +51,7 @@ typed.
 . Determine which perimeter the bug affects.
 
 *When reporting*, use the
-link:.github/ISSUE_TEMPLATE/bug_report.md[bug report template] and include:
+link:.github/ISSUE_TEMPLATE/bug_report.yml[bug report template] and include:
 
 * Clear, descriptive title
 * Environment details (OS, versions, toolchain)
@@ -68,7 +68,7 @@ link:.github/ISSUE_TEMPLATE/bug_report.md[bug report template] and include:
 . Consider which perimeter the feature belongs to.
 
 *When suggesting*, use the
-link:.github/ISSUE_TEMPLATE/feature_request.md[feature request template]
+link:.github/ISSUE_TEMPLATE/feature_request.yml[feature request template]
 and include:
 
 * Problem statement (what pain point does this solve?)
