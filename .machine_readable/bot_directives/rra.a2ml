@@ -21,7 +21,7 @@
         (file "CHANGELOG.adoc")
         (file "Justfile")
         (file "LICENSE")
-        (file "rsr-template-repo_chora.deed")
+        (file "ziz_chora.deed")
         (file "CITATION.cff")
         (file "CLAUDE.md")   ;; generated arrival pack; git/Claude/pre-commit all read it from the ROOT
         (pattern ".*")) ;; Allows hidden dotfiles implicitly, RRA will check specific dotfile rules below

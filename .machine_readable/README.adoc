@@ -36,5 +36,3 @@ Nickel runner and its k9 service-automation component. See
 
 `policies/`:: Maintenance axes and related policy records.
 
-`rsr-profile.a2ml`:: This repository's declared RSR v2.0 capabilities,
-which gate which conformance criteria apply to it.
