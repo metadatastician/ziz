@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: MPL-2.0
+# Output of `tree-sitter generate` (run via `just grammar`); regenerate, don't commit.
+src/parser.c
+src/grammar.json
+src/node-types.json
+src/tree_sitter/
+*.so
+*.wasm

@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+= Žiz — hand-off to the next working session
+:icons: font
+
+This directory was assembled in an Arena session attached to
+`hyperpolymath/standards` that could not write to `metadatastician/ziz`.
+Its final commit on GitHub is `c486e10` (PR hyperpolymath/standards#1048).
+The files here may be slightly newer than that commit (owner decisions,
+`defmacro`, `lib/dialectic.ziz`, `examples/lambda.ziz`, `docs/jeg-schema.a2ml`).
+
+== Owner decisions (2026-09-24) — already applied to DESIGN/TRIAGE
+
+. *Metaiconic* = the text↔value mapping (reader/printer tables) is a
+  first-class, environment-scoped value. Confirmed.
+. *Ж* is a documentation symbol for the class of reflexive things; never a
+  token in code. Surface syntax ASCII-only, no exceptions.
+. *Toolchain*: claudia = readers/printers; boggs = evaluator; federici = JEG
+  store; dunayevskaya = grammar/CST; assata = CLI/REPL.
+. *Dialectics is not semantics.* Pun allowed in docs, error messages, and
+  `lib/dialectic.ziz` only.
+
+== Pending owner decision
+
+* Where the JEG A2ML schema (`docs/jeg-schema.a2ml`) is registered:
+  proposed `hyperpolymath/standards/1-formats/a2ml/jeg/`. This creates a
+  dependency from `ziz` back to `standards`; say so explicitly.
+
+== Next session: what to do, in order
+
+. Open the session *on* `metadatastician/ziz` (not on `standards`), so the
+  GitHub connection can write here.
+. Delete the two branches inherited from the RSR template:
+  `arena/01a0d3a4-rsr-template-repo`, `coderabbit/fix-hypatia-scan-failures/f36ac704`.
+  Also delete them at source in `hyperpolymath/rsr-template-repo`.
+. Move this directory's contents to the repo root beside the template files.
+  Append `Justfile.ziz-fragment` to the template `Justfile`, then delete it.
+. `cd grammar && tree-sitter generate && tree-sitter test`. Fix what breaks
+  (the external scanner is the likeliest culprit; `basics.txt` is the oracle).
+. Compile `bootstrap/ziz0.chpl` with `chpl`. It has never been compiled.
+  Fix what breaks; do not restructure.
+. `just examples` must print `3628800` for `fact.ziz`, the JEG dump with
+  `(sym:fact :arity 1) ; asserted=1 observed=11`, and for `lambda.ziz`:
+  `(var y)`, `(var z)`, `(var q)`.
+. PR against `main` here.
+
+== Rules for any model working on this
+
+* Read `TRIAGE.adoc` first. Nothing in bins B or C may be adopted.
+* Do not invent backends, proofs, toolchain components, or grammar tiers.
+* If you cannot verify something, say so *in the file*.
+* Litmus test for any JEG claim: point to the line where evaluating
+  `(fact 3)` creates an evidence edge. In `ziz0.chpl` it is `proc apply`.
+* Anti-signals to watch for in your own output: "locked in", "beyond a
+  shadow of a doubt", "the only correct choice", a stock-photo credit on an
+  architecture diagram, hazard specs for software that does not exist.
+
+== Prompt to paste (if starting cold)
+
+----
+I'm working on Žiz. This repo (metadatastician/ziz) is an RSR template mint
+with two stray inherited branches — delete them first. The design material
+is in hyperpolymath/standards PR #1048 (branch arena/01a0d475-standards,
+commit c486e10, directory ziz-drop/). Fetch it, move it to the repo root,
+read ziz-drop/HANDOFF.adoc and TRIAGE.adoc before anything else, apply the
+owner decisions listed in HANDOFF.adoc, then follow its "Next session" list
+in order. Nothing in TRIAGE bins B or C may be adopted. Language policy:
+Chapel, C (scanner only), JS (grammar DSL only). No Python, Rust, or Deno.
+Verify, don't assert; if you can't verify, say so in the file.
+----
+
+== Status 2026-10-06 (session opened on `metadatastician/ziz`)
+
+Progress against "Next session" above:
+
+. Done: session opened on `metadatastician/ziz`.
+. Done (nothing to do): `origin` had only `main`; neither inherited branch
+  exists here. *Not checked* at source in `hyperpolymath/rsr-template-repo`.
+. Done: contents moved to the repo root. The branch of PR #1048 was deleted
+  after merge and `ziz-drop/` is gone from `standards` main; the 17 files at
+  its head commit `e56b8bf` were reconciled against the owner's newer local
+  copy (which supplied `HANDOFF.adoc`, `lib/dialectic.ziz`,
+  `examples/lambda.ziz`, `docs/jeg-schema.a2ml`, `defmacro` and the
+  owner-decision text). The template already had a placeholder `build`
+  recipe, so its body was replaced rather than a duplicate appended.
+. Done: `tree-sitter generate && tree-sitter test` — see TRIAGE.adoc
+  §What actually exists for the result and the three scanner/grammar fixes.
+. *Open:* compile `bootstrap/ziz0.chpl`. No `chpl` on the machine used.
+. *Open:* `just examples` expected output — unverified, needs step 5.
+. In progress: PR against `main`.

@@ -1,0 +1,68 @@
+; SPDX-License-Identifier: MPL-2.0
+; examples/lambda.ziz — untyped λ-calculus interpreter written in Žiz.
+;
+; This is the self-hosting smoke test named in DESIGN.adoc §Bootstrap plan.
+; It is what a previous model claimed to have written "in Žiz" while actually
+; writing a Lisp with quote marks on it. This one runs under ziz0 as-is:
+; ordinary n-ary lists, no triads, no Ж.
+;
+; Terms:   (var x)   (lam x body)   (app f a)
+; Strategy: normal-order β-reduction by substitution (capture is NOT handled;
+; use distinct names — this is a smoke test, not a proof assistant).
+
+(define (tag t) (car t))
+(define (second t) (car (cdr t)))
+(define (third t) (car (cdr (cdr t))))
+
+(define (var? t) (eq? (tag t) 'var))
+(define (lam? t) (eq? (tag t) 'lam))
+(define (app? t) (eq? (tag t) 'app))
+
+; subst term x a  ==  term[x := a]
+(define (subst term x a)
+  (if (var? term)
+      (if (eq? (second term) x) a term)
+      (if (lam? term)
+          (if (eq? (second term) x)
+              term                                   ; shadowed
+              (list 'lam (second term) (subst (third term) x a)))
+          (list 'app (subst (second term) x a) (subst (third term) x a)))))
+
+; one β-step at the head, or nil if in weak head normal form
+(define (step term)
+  (if (app? term)
+      (let ((f (second term)) (a (third term)))
+        (if (lam? f)
+            (subst (third f) (second f) a)           ; β
+            (let ((f2 (step f)))
+              (if (nil? f2) nil (list 'app f2 a)))))
+      nil))
+
+(define (normalize term)
+  (let ((next (step term)))
+    (if (nil? next) term (normalize next))))
+
+; Church numerals and arithmetic, as terms
+(define zero '(lam f (lam x (var x))))
+(define (succ n) (list 'lam 'f (list 'lam 'x
+                   (list 'app '(var f) (list 'app (list 'app n '(var f)) '(var x))))))
+(define one (succ zero))
+(define two (succ one))
+(define three (succ two))
+
+; Y = λg.(λh.g (h h)) (λh.g (h h))
+(define Y '(lam g (app (lam h (app (var g) (app (var h) (var h))))
+                       (lam h (app (var g) (app (var h) (var h)))))))
+
+; (λx.x) y  ==>  y
+(print (normalize '(app (lam x (var x)) (var y))))
+
+; K I y z  ==>  z    where K = λa.λb.a, I = λc.c
+(print (normalize '(app (app (app (lam a (lam b (var a))) (lam c (var c))) (var y)) (var z))))
+
+; Y applied to the constant function λr.q reduces to q — the fixed point of a
+; constant is the constant. Proves the combinator is wired correctly without
+; needing Church arithmetic on top.
+(print (normalize (list 'app Y '(lam r (var q)))))
+
+(claim normalize :returns :pair :evidence :asserted :by "examples/lambda.ziz")

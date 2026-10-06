@@ -1,0 +1,28 @@
+; SPDX-License-Identifier: MPL-2.0
+; lib/dialectic.ziz — the ONE place the pun is allowed to touch code.
+;
+; Owner ruling 2026-09-24: dialectics is not semantics. This is an optional
+; library: a macro that rewrites (sublate thesis antithesis) into an ordinary
+; call of a user-supplied resolver. Nothing in the evaluator knows it exists.
+; Load with:  (load "lib/dialectic.ziz")   -- once `load` exists; for now
+; paste into the REPL or prepend to a file.
+
+; A resolver is any 2-ary function. Default: build a list tagged :synthesis.
+(define (default-resolver thesis antithesis)
+  (list :synthesis thesis antithesis))
+
+(define *resolver* default-resolver)
+(define (set-resolver! f) (set! *resolver* f))
+
+; (sublate T A) => (*resolver* T A)
+; Both operands ARE evaluated (it's an ordinary call after expansion); the
+; macro exists only so the surface reads the way the name suggests.
+(defmacro (sublate thesis antithesis)
+  (list '*resolver* thesis antithesis))
+
+; The negation-of-the-negation is just function composition. It always was.
+(define (negate x) (list :not x))
+(define (negate-negation x) (negate (negate x)))
+
+; Record that this library asserts nothing about the world.
+(claim sublate :pure :evidence :asserted :by "lib/dialectic.ziz")
