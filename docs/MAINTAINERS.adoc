@@ -3,8 +3,9 @@
 = Maintainers
 :toc: preamble
 
-This is the single maintainer roster for this repository. It supersedes the
+This is the maintainer roster for ziz. It supersedes the
 earlier duplicates at `.github/MAINTAINERS` and `docs/attribution/MAINTAINERS.adoc`.
+The repository's GitHub owner is link:https://github.com/metadatastician[metadatastician].
 
 == Current maintainers
 
@@ -12,9 +13,9 @@ earlier duplicates at `.github/MAINTAINERS` and `docs/attribution/MAINTAINERS.ad
 |===
 | Name | Role | Contact
 
-| {{AUTHOR}}
+| Jonathan D.A. Jewell
 | Lead Maintainer
-| https://github.com/{{OWNER}}[@{{OWNER}}]
+| https://github.com/hyperpolymath[@hyperpolymath]
 |===
 
 == Responsibilities

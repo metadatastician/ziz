@@ -32,7 +32,7 @@ LICENSE
 LICENSES/                  # REUSE licence texts, dual-licence model (code MPL-2.0 / docs CC-BY-SA-4.0)
 CHANGELOG.adoc             # AsciiDoc is the estate-standard documentation format
 CITATION.cff               # citation metadata; GitHub reads it from the root of the default branch only
-rsr-template-repo_chora.deed # the repo deed: universal AI entry point; family-7 allocation manifest + ply tree folded in (standards#837 pilot). Filename carries the repo slug (deed dispatch <stem>_chora.deed), so repo-init renames it at mint
+ziz_chora.deed             # the repo deed: universal AI entry point; family-7 allocation manifest + ply tree folded in (standards#837 pilot). Filename carries the repo slug (deed dispatch <stem>_chora.deed)
 CLAUDE.md                  # generated arrival pack; the generator, pre-commit and Claude Code all read it from the ROOT (do not hand-edit; edit the a2ml source)
 ?GEMINI.md                # pointer to CLAUDE.md for repos without AGENTS.md yet
 Justfile                   # thin; delegates phases to build/just/*.just
@@ -80,3 +80,11 @@ tests/
 ?CONTRIBUTING.adoc          # estate docs gate (standards scripts/check-docs-presence.sh) requires CONTRIBUTING at the ROOT; this is the copy it verifies
 ?SECURITY.md               # accepted at root OR .github/; likewise
 ?REQUIRES_INITIALISATION.md  # written by the minting process, removed once `just repo-init` runs
+
+# --- ziz-specific root entries (added 2026-10-06) ---
+DESIGN.adoc                # the language design; Justfile (lexical-rules check) and TRIAGE/HANDOFF cite it at the root
+TRIAGE.adoc                # what was deliberately left out of the design; DESIGN.adoc links it relatively
+HANDOFF.adoc               # session hand-off; the Justfile example-output check cites its expectations
+bootstrap/                 # ziz0, the bootstrap interpreter (Chapel)
+grammar/                   # tree-sitter grammar for the surface syntax
+lib/                       # the ziz standard library sources (.ziz)

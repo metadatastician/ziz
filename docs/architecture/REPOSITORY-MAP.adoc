@@ -97,9 +97,17 @@ predecessors did.
 | optional
 | estate docs gate (standards scripts/check-docs-presence.sh) requires CONTRIBUTING at the ROOT; this is the copy it verifies
 
+| `DESIGN.adoc`
+| yes
+| the language design; Justfile (lexical-rules check) and TRIAGE/HANDOFF cite it at the root
+
 | `GEMINI.md`
 | optional
 | pointer to CLAUDE.md for repos without AGENTS.md yet
+
+| `HANDOFF.adoc`
+| yes
+| session hand-off; the Justfile example-output check cites its expectations
 
 | `Justfile`
 | yes
@@ -117,6 +125,10 @@ predecessors did.
 | yes
 | -
 
+| `TRIAGE.adoc`
+| yes
+| what was deliberately left out of the design; DESIGN.adoc links it relatively
+
 | `archetypes/`
 | optional
 | template-only variation seam (ADR-0003); `just repo-init` removes it from minted repos
@@ -124,6 +136,10 @@ predecessors did.
 | `benches/`
 | optional
 | Cargo-conventional at package root
+
+| `bootstrap/`
+| yes
+| ziz0, the bootstrap interpreter (Chapel)
 
 | `build/`
 | yes
@@ -149,13 +165,17 @@ predecessors did.
 | optional
 | optional feature packs
 
+| `grammar/`
+| yes
+| tree-sitter grammar for the surface syntax
+
+| `lib/`
+| yes
+| the ziz standard library sources (.ziz)
+
 | `mise.toml`
 | yes
 | pinned toolchains
-
-| `rsr-template-repo_chora.deed`
-| yes
-| the repo deed: universal AI entry point; family-7 allocation manifest + ply tree folded in (standards#837 pilot). Filename carries the repo slug (deed dispatch <stem>_chora.deed), so repo-init renames it at mint
 
 | `scripts/`
 | yes
@@ -184,6 +204,10 @@ predecessors did.
 | `www/`
 | yes
 | site-operations bundle; canonical .well-known/ lives at www/.well-known/ (issue #53)
+
+| `ziz_chora.deed`
+| yes
+| the repo deed: universal AI entry point; family-7 allocation manifest + ply tree folded in (standards#837 pilot). Filename carries the repo slug (deed dispatch <stem>_chora.deed)
 
 |===
 
@@ -227,7 +251,6 @@ your own repo - but do not read their emptiness as neglect here.
 | `docs/whitepapers/academic/`
 | `docs/whitepapers/industry/`
 | `docs/whitepapers/outreach/`
-| `examples/`
 | `features/boj-server/`
 | `features/panic-attacker/`
 | `src/aspects/`
