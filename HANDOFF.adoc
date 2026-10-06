@@ -84,6 +84,9 @@ Progress against "Next session" above:
   recipe, so its body was replaced rather than a duplicate appended.
 . Done: `tree-sitter generate && tree-sitter test` — see TRIAGE.adoc
   §What actually exists for the result and the three scanner/grammar fixes.
-. *Open:* compile `bootstrap/ziz0.chpl`. No `chpl` on the machine used.
-. *Open:* `just examples` expected output — unverified, needs step 5.
-. In progress: PR against `main`.
+. Done (later the same day): `ziz0.chpl` compiles with Chapel 2.10.0; see
+  TRIAGE.adoc §What actually exists for the fixes.
+. Done: every expected output above appears; `just examples-check` asserts
+  them and `just test` runs it.
+. Done: PR metadatastician/ziz#12 (import), then a follow-up PR for the
+  build, checks and the A2ML→deed conversion.

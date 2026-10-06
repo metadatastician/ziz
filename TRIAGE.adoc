@@ -240,11 +240,18 @@ library, not core. Table kept for the record.
   comment-only line, lost DEDENTs mid-file); `test/corpus/layout-regressions.txt`
   pins them, and fails 2/7 against the original scanner.
 * `bootstrap/ziz0.chpl` — Chapel reader + evaluator + printer + in-memory
-  JEG + `defmacro`. *Never compiled: no Chapel compiler was available in any
-  session so far. Expect small fixes on first `chpl` run.*
-* `examples/*.ziz` (incl. `lambda.ziz`), `lib/dialectic.ziz` — *never run*,
-  for the same reason.
-* Recipes `build`, `examples`, `grammar`, `ascii-check` in the `Justfile`
-  (formerly `Justfile.ziz-fragment`).
+  JEG + `defmacro`. *Verified 2026-10-06:* compiles with Chapel 2.10.0
+  after mechanical fixes only (identifiers that are Chapel keywords: `out`,
+  `by`, `index`; `x.car!` yields a borrowed value, so non-nil shared
+  accessors `carV`/`cdrV`/`bodyV`; `map` inserts via `add`/`addOrReplace`;
+  concrete `enum P`; `in` intent on `mkEnv`). No structural change.
+* `examples/*.ziz` — all except the off-side `layout.ziz` (which `ziz0`
+  milestone 0 is not meant to read) run and print what HANDOFF.adoc expects:
+  `3628800`; `(sym:fact :arity 1)  ; asserted=1 observed=11`; and
+  `(var y)`, `(var z)`, `(var q)` from the λ-calculus smoke test.
+  `lib/dialectic.ziz` runs: `defmacro` expands, records `:expanded-by`.
+* `Justfile`: `build` (pinned to Chapel 2.10), `examples`, `examples-check`,
+  `grammar`, `ascii-check`, and `test` = all three checks. Each check has
+  been shown to fail on a planted fault.
 
 Nothing from bins B or C appears in any of those files.
