@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: MPL-2.0
+# A2ML schema draft: jeg/0 — Judgement Evidence Graph sidecar.
+# Home once stable: hyperpolymath/standards/1-formats/a2ml/jeg/  (owner to file)
+# One sidecar per source file:  foo.ziz -> foo.jeg.a2ml
+
+[schema]
+name = "jeg"
+version = 0
+status = "draft"
+
+[meta]                       # required, exactly one
+source = "string"            # path relative to repo root
+source-sha256 = "hex64"
+grammar = "string"           # e.g. tree-sitter-ziz@0.0.1
+produced-by = "string"       # tool@version
+produced-at = "iso8601"
+
+[[judgement]]                # zero or more; id unique per file
+id = "string"                # j0001 ...
+subject = "string"           # "sym:<name>" | "node:<id>" | "anon:<printed form>"
+predicate = "string"         # open vocabulary; see docs/JEG.adoc
+args = "array"               # of scalars; [] if none
+# Structural identity is (subject, predicate, args). Writers MUST hash-cons:
+# never emit two judgements with the same triple.
+
+[[evidence]]                 # zero or more
+for = "string"               # judgement id
+kind = "enum"                # asserted | inferred | observed | tested | contradicted
+by = "string"                # agent: author | ziz0 | <tool> | <person>
+at = "iso8601"
+where = "string"             # "node:<id>" | "file:line:col"
+via = "string?"              # optional tool/pass name
+supports = "array?"          # optional: other judgement ids this evidence also supports
+
+[merge]
+# Union of judgements by structural triple; union of evidence.
+# node:* subjects re-anchored via tree-sitter edit log; unresolvable ones get
+# a synthetic judgement (subject, ":orphaned") with evidence kind=inferred by=merger.

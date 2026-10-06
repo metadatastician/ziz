@@ -87,14 +87,7 @@ import? "build/just/assess.just"
 
 # Build the project (debug mode)
 build *args:
-    @echo "Building {{project}} (debug)..."
-    # TODO: Replace with your build command
-    # Examples:
-    #   cargo build {{args}}                    # Rust
-    #   mix compile {{args}}                    # Elixir
-    #   zig build {{args}}                      # Zig
-    #   deno task build {{args}}                # Deno/
-    @echo "Build complete"
+    chpl --fast bootstrap/ziz0.chpl -o ziz0 {{args}}
 
 # Build in release mode with optimizations
 build-release *args:
@@ -718,3 +711,20 @@ uncloak:
     else
         echo "Use 'ls -a' to view dotfiles on this OS."
     fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ŽIZ (from ziz-drop/Justfile.ziz-fragment; `build` is above)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Run every example the ziz0 sexp reader can read, with JEG observation on
+examples: build
+    for f in examples/hello.ziz examples/fact.ziz examples/quote-eval.ziz examples/reflexive.ziz examples/lambda.ziz; do \
+      echo "== $f"; ./ziz0 --file=$f --jeg=observe; done
+
+# Generate the tree-sitter parser and run the grammar corpus tests
+grammar:
+    cd grammar && tree-sitter generate && tree-sitter test
+
+# Report non-ASCII characters outside string literals in Žiz sources
+ascii-check:
+    ! grep -rnP '[^\x00-\x7F]' examples/ grammar/grammar.js bootstrap/ziz0.chpl | grep -v '"' || true

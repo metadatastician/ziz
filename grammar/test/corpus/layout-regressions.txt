@@ -1,0 +1,49 @@
+================================================================================
+dedent two levels back to top level mid-file
+================================================================================
+define (fact n)
+  if (= n 0)
+    1
+    * n (fact (- n 1))
+
+print (fact 10)
+--------------------------------------------------------------------------------
+(source_file
+  (layout_list (symbol) (list (symbol) (symbol))
+    (layout_block
+      (layout_list (symbol) (list (symbol) (symbol) (integer))
+        (layout_block
+          (integer)
+          (layout_list (symbol) (symbol) (list (symbol) (list (symbol) (symbol) (integer))))))))
+  (layout_list (symbol) (list (symbol) (integer))))
+
+================================================================================
+leading comment line before first form
+================================================================================
+; a comment
+(print 1)
+--------------------------------------------------------------------------------
+(source_file
+  (comment)
+  (list (symbol) (integer)))
+
+================================================================================
+no trailing newline at end of input
+================================================================================
+a b
+--------------------------------------------------------------------------------
+(source_file
+  (layout_list (symbol) (symbol)))
+
+================================================================================
+brackets spanning lines are layout-insensitive
+================================================================================
+f (a
+      b)
+  c
+g h
+--------------------------------------------------------------------------------
+(source_file
+  (layout_list (symbol) (list (symbol) (symbol))
+    (layout_block (symbol)))
+  (layout_list (symbol) (symbol)))
