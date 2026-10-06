@@ -10,8 +10,8 @@
 // Deliberately NOT here: FPGA anything, multi-locale anything, backends,
 // triads, boundary operators.
 //
-// STATUS: written without a Chapel compiler available. Expect small fixes on
-// first `chpl` run; the structure is what matters. Target: Chapel 2.x.
+// STATUS: written without a compiler; first compiled 2026-10-06 with Chapel
+// 2.10.0 after mechanical fixes only. `just examples-check` pins its output.
 //
 // Build:  chpl --fast bootstrap/ziz0.chpl -o ziz0
 // Run:    ./ziz0 --file=examples/hello.ziz
@@ -50,6 +50,13 @@ class Value {
 
 type V = shared Value;
 
+// Non-nil shared views of the nilable fields. `x.car!` would yield a
+// *borrowed* Value, which cannot be stored in a V; callers check tags first,
+// so a nil here is an interpreter bug and halts.
+proc Value.carV(): V { return try! this.car: V; }
+proc Value.cdrV(): V { return try! this.cdr: V; }
+proc Value.bodyV(): V { return try! this.body: V; }
+
 proc mkNil(): V { return new shared Value(Tag.Nil); }
 proc mkBool(x: bool): V { var v = new shared Value(Tag.Bool); v.b = x; return v; }
 proc mkInt(x: int): V { var v = new shared Value(Tag.Int); v.i = x; return v; }
@@ -59,7 +66,7 @@ proc mkSym(x: string): V { var v = new shared Value(Tag.Sym); v.s = x; return v;
 proc mkErr(x: string): V { var v = new shared Value(Tag.Err); v.s = x; return v; }
 proc mkPair(a: V, d: V): V { var v = new shared Value(Tag.Pair); v.car = a; v.cdr = d; return v; }
 proc mkPrim(id: int, name: string): V { var v = new shared Value(Tag.Prim); v.prim = id; v.s = name; return v; }
-proc mkEnv(parent: V?): V { var v = new shared Value(Tag.Env); v.env = parent; return v; }
+proc mkEnv(in parent: V?): V { var v = new shared Value(Tag.Env); v.env = parent; return v; }
 
 proc isNil(v: V): bool { return v.tag == Tag.Nil; }
 proc truthy(v: V): bool { return !(v.tag == Tag.Nil || (v.tag == Tag.Bool && !v.b)); }
@@ -73,12 +80,12 @@ proc listFrom(ref xs: list(V)): V {
 iter listItems(v: V): V {
   var cur = v;
   while cur.tag == Tag.Pair {
-    yield cur.car!;
-    cur = cur.cdr!;
+    yield cur.carV();
+    cur = cur.cdrV();
   }
 }
 
-proc listLen(v: V): int { var n = 0; for _ in listItems(v) do n += 1; return n; }
+proc listLen(v: V): int { var n = 0; for unused in listItems(v) do n += 1; return n; }
 
 // --------------------------------------------------------------------------
 // Environment (first-class; see DESIGN.adoc §Reflexivity)
@@ -93,7 +100,7 @@ proc envLookup(e: V, name: string): V? {
   return nil;
 }
 
-proc envDefine(e: V, name: string, v: V) { e.kv[name] = v; }
+proc envDefine(e: V, name: string, v: V) { e.kv.addOrReplace(name, v); }
 
 proc envSet(e: V, name: string, v: V): bool {
   var cur: V? = e;
@@ -142,7 +149,7 @@ record Reader {
                  for x in listItems(l) do v.items.pushBack(x); return v; }
       when "{" { adv(); var l = readSeq("}"); var v = new shared Value(Tag.MapV);
                  var k: V? = nil;
-                 for x in listItems(l) { if k == nil then k = x; else { v.kv[show(k!)] = x; k = nil; } }
+                 for x in listItems(l) { if k == nil then k = x; else { v.kv.addOrReplace(show(try! k: V), x); k = nil; } }
                  return v; }
       when ")" { adv(); return mkErr("unexpected )"); }
       when "]" { adv(); return mkErr("unexpected ]"); }
@@ -171,21 +178,21 @@ record Reader {
   }
 
   proc ref readString(): V {
-    var out = "";
+    var buf = "";
     while !atEnd() {
       const c = adv();
-      if c == "\"" then return mkStr(out);
+      if c == "\"" then return mkStr(buf);
       if c == "\\" {
         const e = adv();
         select e {
-          when "n" do out += "\n";
-          when "t" do out += "\t";
-          when "r" do out += "\r";
-          when "\"" do out += "\"";
-          when "\\" do out += "\\";
-          otherwise do out += e;
+          when "n" do buf += "\n";
+          when "t" do buf += "\t";
+          when "r" do buf += "\r";
+          when "\"" do buf += "\"";
+          when "\\" do buf += "\\";
+          otherwise do buf += e;
         }
-      } else out += c;
+      } else buf += c;
     }
     return mkErr("unterminated string");
   }
@@ -221,7 +228,7 @@ proc show(v: V): string {
     when Tag.Fn do return "#<fn>";
     when Tag.Env do return "#<env>";
     when Tag.Node do return "(node " + v.nodeId: string + ")";
-    when Tag.Claim do return "#<claim " + show(v.body!) + ">";
+    when Tag.Claim do return "#<claim " + show(v.bodyV()) + ">";
     when Tag.Vec {
       var s = "[";
       for (x, k) in zip(v.items, 0..) { if k > 0 then s += " "; s += show(x); }
@@ -236,8 +243,8 @@ proc show(v: V): string {
       var s = "("; var cur = v; var first = true;
       while cur.tag == Tag.Pair {
         if !first then s += " "; first = false;
-        s += show(cur.car!);
-        cur = cur.cdr!;
+        s += show(cur.carV());
+        cur = cur.cdrV();
       }
       if !isNil(cur) then s += " . " + show(cur);
       return s + ")";
@@ -254,31 +261,31 @@ proc show(v: V): string {
 // --------------------------------------------------------------------------
 
 record Judgement { var subject: string; var predicate: string; var args: string; }
-record Evidence  { var forId: int; var kind: string; var by: string; var where_: string; }
+record Evidence  { var forId: int; var kind: string; var agent: string; var where_: string; }
 
 class JEG {
   var judgements: list(Judgement);
-  var index: map(string, int);           // structural key -> id (hash-consing)
+  var keyIndex: map(string, int);           // structural key -> id (hash-consing)
   var evidence: list(Evidence);
 
   proc assert_(subject: string, predicate: string, args: string,
-               kind: string, by: string, where_: string) {
+               kind: string, agent: string, where_: string) {
     const key = subject + "\x01" + predicate + "\x01" + args;
     var id: int;
-    if index.contains(key) then id = index[key];
+    if keyIndex.contains(key) then id = keyIndex[key];
     else {
       judgements.pushBack(new Judgement(subject, predicate, args));
       id = judgements.size - 1;
-      index[key] = id;
+      keyIndex.add(key, id);
     }
-    evidence.pushBack(new Evidence(id, kind, by, where_));
+    evidence.pushBack(new Evidence(id, kind, agent, where_));
   }
 
   proc dump() {
     writeln("; --- JEG: ", judgements.size, " judgements, ", evidence.size, " evidence edges");
     for (j, id) in zip(judgements, 0..) {
       var kinds: map(string, int);
-      for e in evidence do if e.forId == id then kinds[e.kind] += 1;
+      for e in evidence do if e.forId == id then { if kinds.contains(e.kind) then kinds[e.kind] += 1; else kinds.add(e.kind, 1); }
       var ks = "";
       for k in kinds.keys() do ks += " " + k + "=" + kinds[k]: string;
       writeln("(", j.subject, " ", j.predicate, if j.args != "" then " " + j.args else "", ")  ;", ks);
@@ -300,7 +307,7 @@ proc tagName(v: V): string { return ":" + (v.tag: string).toLower(); }
 // Primitives
 // --------------------------------------------------------------------------
 
-enum P { Add, Sub, Mul, Div, Lt, Gt, Le, Ge, NumEq, Eq, Cons, Car, Cdr, ListP, Print,
+enum P { Add = 0, Sub, Mul, Div, Lt, Gt, Le, Ge, NumEq, Eq, Cons, Car, Cdr, ListP, Print,
          Eval, CurrentEnv, JegDump, Not, IsNil, Len, Str, IsPair, IsSym, IsStr }
 
 proc numOf(v: V): real { return if v.tag == Tag.Int then v.i: real else v.r; }
@@ -349,7 +356,7 @@ proc valEq(a: V, b: V): bool {
     when Tag.Real do return a.r == b.r;
     when Tag.Str do return a.s == b.s;
     when Tag.Sym do return a.s == b.s;
-    when Tag.Pair do return valEq(a.car!, b.car!) && valEq(a.cdr!, b.cdr!);
+    when Tag.Pair do return valEq(a.carV(), b.carV()) && valEq(a.cdrV(), b.cdrV());
     otherwise do return a == b;
   }
 }
@@ -368,8 +375,8 @@ proc applyPrim(p: V, ref args: list(V), env: V): V {
     when P.NumEq do return mkBool(numOf(args[0]) == numOf(args[1]));
     when P.Eq do return mkBool(valEq(args[0], args[1]));
     when P.Cons do return mkPair(args[0], args[1]);
-    when P.Car do return if args[0].tag == Tag.Pair then args[0].car! else mkErr("car of non-pair");
-    when P.Cdr do return if args[0].tag == Tag.Pair then args[0].cdr! else mkErr("cdr of non-pair");
+    when P.Car do return if args[0].tag == Tag.Pair then args[0].carV() else mkErr("car of non-pair");
+    when P.Cdr do return if args[0].tag == Tag.Pair then args[0].cdrV() else mkErr("cdr of non-pair");
     when P.ListP do return listFrom(args);
     when P.Print { for a in args do write(if a.tag == Tag.Str then a.s else show(a)); writeln(); return mkNil(); }
     when P.Eval do return eval(args[0], if args.size > 1 then args[1] else env);
@@ -399,19 +406,19 @@ proc installPrims(g: V) {
 
 proc quasi(x: V, env: V): V {
   if x.tag != Tag.Pair then return x;
-  const head = x.car!;
-  if head.tag == Tag.Sym && head.s == "unquote" then return eval(x.cdr!.car!, env);
-  var out: list(V);
+  const head = x.carV();
+  if head.tag == Tag.Sym && head.s == "unquote" then return eval(x.cdrV().carV(), env);
+  var buf: list(V);
   for item in listItems(x) {
-    if item.tag == Tag.Pair && item.car!.tag == Tag.Sym && item.car!.s == "unquote-splicing" {
-      for y in listItems(eval(item.cdr!.car!, env)) do out.pushBack(y);
-    } else out.pushBack(quasi(item, env));
+    if item.tag == Tag.Pair && item.carV().tag == Tag.Sym && item.carV().s == "unquote-splicing" {
+      for y in listItems(eval(item.cdrV().carV(), env)) do buf.pushBack(y);
+    } else buf.pushBack(quasi(item, env));
   }
-  return listFrom(out);
+  return listFrom(buf);
 }
 
 proc apply(f: V, ref args: list(V), env: V, callNode: V): V {
-  const subj = subjectOf(callNode.car!);
+  const subj = subjectOf(callNode.carV());
   const where_ = "node:" + callNode.nodeId: string;
   if jeg == "observe" {
     theJEG.assert_(subj, ":callable", "", "observed", "ziz0", where_);
@@ -426,7 +433,7 @@ proc apply(f: V, ref args: list(V), env: V, callNode: V): V {
       if f.items.size != args.size then return mkErr("arity mismatch calling fn");
       var frame = mkEnv(f.env);
       for (p, a) in zip(f.items, args) do envDefine(frame, p.s, a);
-      result = eval(f.body!, frame);
+      result = eval(f.bodyV(), frame);
     }
     otherwise do return mkErr("not callable: " + show(f));
   }
@@ -440,89 +447,89 @@ proc eval(x: V, env: V): V {
     when Tag.Sym {
       if x.s.size > 1 && x.s[0] == ":" then return x;   // keywords self-evaluate
       const v = envLookup(env, x.s);
-      return if v != nil then v! else mkErr("unbound: " + x.s);
+      return if v != nil then (try! v: V) else mkErr("unbound: " + x.s);
     }
     when Tag.Pair {
-      const head = x.car!;
+      const head = x.carV();
       if head.tag == Tag.Sym {
         select head.s {
-          when "quote" do return x.cdr!.car!;
-          when "quasiquote" do return quasi(x.cdr!.car!, env);
+          when "quote" do return x.cdrV().carV();
+          when "quasiquote" do return quasi(x.cdrV().carV(), env);
           when "if" {
-            const c = eval(x.cdr!.car!, env);
-            const rest = x.cdr!.cdr!;
-            if truthy(c) then return eval(rest.car!, env);
-            return if rest.cdr!.tag == Tag.Pair then eval(rest.cdr!.car!, env) else mkNil();
+            const c = eval(x.cdrV().carV(), env);
+            const rest = x.cdrV().cdrV();
+            if truthy(c) then return eval(rest.carV(), env);
+            return if rest.cdrV().tag == Tag.Pair then eval(rest.cdrV().carV(), env) else mkNil();
           }
           when "define" {
-            const target = x.cdr!.car!;
+            const target = x.cdrV().carV();
             if target.tag == Tag.Pair {
               var fn = new shared Value(Tag.Fn);
-              for p in listItems(target.cdr!) do fn.items.pushBack(p);
-              fn.body = mkPair(mkSym("begin"), x.cdr!.cdr!);
+              for p in listItems(target.cdrV()) do fn.items.pushBack(p);
+              fn.body = mkPair(mkSym("begin"), x.cdrV().cdrV());
               fn.env = env;
-              envDefine(env, target.car!.s, fn);
+              envDefine(env, target.carV().s, fn);
               if jeg == "observe" then
-                theJEG.assert_("sym:" + target.car!.s, ":defined-at", "", "observed", "ziz0",
+                theJEG.assert_("sym:" + target.carV().s, ":defined-at", "", "observed", "ziz0",
                                "node:" + x.nodeId: string);
-              return mkSym(target.car!.s);
+              return mkSym(target.carV().s);
             }
-            const v = eval(x.cdr!.cdr!.car!, env);
+            const v = eval(x.cdrV().cdrV().carV(), env);
             envDefine(env, target.s, v);
             return mkSym(target.s);
           }
           when "set!" {
-            const v = eval(x.cdr!.cdr!.car!, env);
-            return if envSet(env, x.cdr!.car!.s, v) then v else mkErr("set! of unbound");
+            const v = eval(x.cdrV().cdrV().carV(), env);
+            return if envSet(env, x.cdrV().carV().s, v) then v else mkErr("set! of unbound");
           }
           when "lambda" {
             var fn = new shared Value(Tag.Fn);
-            for p in listItems(x.cdr!.car!) do fn.items.pushBack(p);
-            fn.body = mkPair(mkSym("begin"), x.cdr!.cdr!);
+            for p in listItems(x.cdrV().carV()) do fn.items.pushBack(p);
+            fn.body = mkPair(mkSym("begin"), x.cdrV().cdrV());
             fn.env = env;
             return fn;
           }
           when "defmacro" {
             // (defmacro (name params...) body...) — a fn applied to UNEVALUATED
             // operands whose result is then evaluated in the caller's env.
-            const target = x.cdr!.car!;
+            const target = x.cdrV().carV();
             var fn = new shared Value(Tag.Fn);
-            for p in listItems(target.cdr!) do fn.items.pushBack(p);
-            fn.body = mkPair(mkSym("begin"), x.cdr!.cdr!);
+            for p in listItems(target.cdrV()) do fn.items.pushBack(p);
+            fn.body = mkPair(mkSym("begin"), x.cdrV().cdrV());
             fn.env = env;
             fn.isMacro = true;
-            envDefine(env, target.car!.s, fn);
-            return mkSym(target.car!.s);
+            envDefine(env, target.carV().s, fn);
+            return mkSym(target.carV().s);
           }
           when "begin" {
             var last = mkNil();
-            for form in listItems(x.cdr!) do last = eval(form, env);
+            for form in listItems(x.cdrV()) do last = eval(form, env);
             return last;
           }
           when "let" {
             var frame = mkEnv(env);
-            for binding in listItems(x.cdr!.car!) do
-              envDefine(frame, binding.car!.s, eval(binding.cdr!.car!, env));
+            for binding in listItems(x.cdrV().carV()) do
+              envDefine(frame, binding.carV().s, eval(binding.cdrV().carV(), env));
             var last = mkNil();
-            for form in listItems(x.cdr!.cdr!) do last = eval(form, frame);
+            for form in listItems(x.cdrV().cdrV()) do last = eval(form, frame);
             return last;
           }
           when "claim" {
             // (claim subject predicate args... :evidence kind [:by who])
-            const subj = x.cdr!.car!;
+            const subj = x.cdrV().carV();
             var rest: list(V);
-            for item in listItems(x.cdr!.cdr!) do rest.pushBack(item);
-            var predicate = "", args = "", kind = "asserted", by = "author";
+            for item in listItems(x.cdrV().cdrV()) do rest.pushBack(item);
+            var predicate = "", args = "", kind = "asserted", agent = "author";
             var idx = 0;
             while idx < rest.size {
               const it = rest[idx];
               if it.tag == Tag.Sym && it.s == ":evidence" { kind = rest[idx+1].s.strip(":"); idx += 2; continue; }
-              if it.tag == Tag.Sym && it.s == ":by" { by = show(rest[idx+1]).strip("\""); idx += 2; continue; }
+              if it.tag == Tag.Sym && it.s == ":by" { agent = show(rest[idx+1]).strip("\""); idx += 2; continue; }
               if predicate == "" then predicate = show(it);
               else args += (if args != "" then " " else "") + show(it);
               idx += 1;
             }
-            theJEG.assert_(subjectOf(subj), predicate, args, kind, by, "node:" + x.nodeId: string);
+            theJEG.assert_(subjectOf(subj), predicate, args, kind, agent, "node:" + x.nodeId: string);
             var c = new shared Value(Tag.Claim); c.body = subj;
             return c;
           }
@@ -532,7 +539,7 @@ proc eval(x: V, env: V): V {
       if f.tag == Tag.Err then return f;
       if f.tag == Tag.Fn && f.isMacro {
         var raw: list(V);
-        for a in listItems(x.cdr!) do raw.pushBack(a);
+        for a in listItems(x.cdrV()) do raw.pushBack(a);
         const expansion = apply(f, raw, env, x);
         if expansion.tag == Tag.Err then return expansion;
         if jeg == "observe" then
@@ -541,7 +548,7 @@ proc eval(x: V, env: V): V {
         return eval(expansion, env);
       }
       var args: list(V);
-      for a in listItems(x.cdr!) {
+      for a in listItems(x.cdrV()) {
         const v = eval(a, env);
         if v.tag == Tag.Err then return v;
         args.pushBack(v);

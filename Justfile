@@ -24,6 +24,7 @@ OWNER := "hyperpolymath"
 REPO := "rsr-template-repo"
 version := "0.1.0"
 tier := "infrastructure"  # 1 | 2 | infrastructure
+chapel_version := "2.10"  # ziz0 is built and tested with this chpl (major.minor)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DEFAULT & HELP
@@ -87,7 +88,18 @@ import? "build/just/assess.just"
 
 # Build the project (debug mode)
 build *args:
-    chpl --fast bootstrap/ziz0.chpl -o ziz0 {{args}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v chpl >/dev/null; then
+      echo "FAIL: chpl not on PATH. Install Chapel {{chapel_version}}.x (see README.adoc §Building)." >&2
+      exit 1
+    fi
+    have="$(chpl --version | sed -n 's/^chpl version \([0-9]*\.[0-9]*\).*/\1/p')"
+    if [ "$have" != "{{chapel_version}}" ]; then
+      echo "FAIL: chpl $have found; ziz0 is pinned to Chapel {{chapel_version}}.x." >&2
+      exit 1
+    fi
+    chpl --fast bootstrap/ziz0.chpl -o ziz0 "$@"
 
 # Build in release mode with optimizations
 build-release *args:
@@ -130,18 +142,11 @@ clean-all: clean
 # Run all tests
 test *args:
     #!/usr/bin/env bash
-    # A check that cannot fail is not a check. This recipe MUST be replaced at
-    # mint with the project's real test command; until then it fails loudly
-    # rather than printing "Tests passed!" over an empty run.
-    #
-    # Replace this whole body with one of:
-    #   cargo test --workspace {{args}}
-    #   mix test {{args}}
-    #   zig build test {{args}}
-    #   deno test {{args}}
-    echo "FAIL: \`just test\` has not been wired to a real test command yet." >&2
-    echo "      Edit the 'test' recipe in the Justfile before relying on this gate." >&2
-    exit 1
+    # Žiz: grammar corpus, ziz0 build + example expectations, ASCII surface rule.
+    set -euo pipefail
+    just grammar
+    just examples-check
+    just ascii-check
 
 # Run tests with verbose output
 test-verbose:
@@ -725,6 +730,50 @@ examples: build
 grammar:
     cd grammar && tree-sitter generate && tree-sitter test
 
-# Report non-ASCII characters outside string literals in Žiz sources
+# Run ziz0 on the examples and fail unless each prints what HANDOFF.adoc expects
+examples-check: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    fails=0
+    # expect FILE NEEDLE... : run FILE under ziz0 --jeg=observe and require
+    # every NEEDLE to appear as a whole output line.
+    expect() {
+      local f="$1"; shift
+      local out; out="$(./ziz0 --file="$f" --jeg=observe)"
+      for needle in "$@"; do
+        if grep -qxF -- "$needle" <<<"$out"; then echo "ok   $f: $needle"
+        else echo "FAIL $f: missing line: $needle" >&2; fails=$((fails + 1)); fi
+      done
+    }
+    expect examples/hello.ziz "hello, ziz"
+    expect examples/fact.ziz "3628800" "(sym:fact :arity 1)  ; asserted=1 observed=11"
+    expect examples/quote-eval.ziz "(+ 1 2 3)" "+" "6" "15"
+    expect examples/reflexive.ziz "84"
+    expect examples/lambda.ziz "(var y)" "(var z)" "(var q)"
+    [ "$fails" -eq 0 ] || { echo "examples-check: $fails expectation(s) failed" >&2; exit 1; }
+
+# Fail if a .ziz source has non-ASCII outside "string" literals and ; comments
+# (DESIGN.adoc §Lexical rules: the surface syntax is printable ASCII only).
 ascii-check:
-    ! grep -rnP '[^\x00-\x7F]' examples/ grammar/grammar.js bootstrap/ziz0.chpl | grep -v '"' || true
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mapfile -t files < <(find examples lib -name '*.ziz' | sort)
+    [ "${#files[@]}" -gt 0 ] || { echo "ascii-check: no .ziz files found" >&2; exit 1; }
+    LC_ALL=C awk '
+      FNR == 1 { instr = 0 }
+      {
+        for (i = 1; i <= length($0); i++) {
+          c = substr($0, i, 1)
+          if (instr) {
+            if (c == "\\") i++
+            else if (c == "\"") instr = 0
+            continue
+          }
+          if (c == ";") break
+          if (c == "\"") { instr = 1; continue }
+          if (c > "\177") { printf "%s:%d:%d: non-ASCII outside string/comment\n", FILENAME, FNR, i; bad++ ; break }
+        }
+      }
+      END { if (bad) { printf "ascii-check: %d line(s) with non-ASCII syntax\n", bad > "/dev/stderr"; exit 1 } }
+    ' "${files[@]}"
+    echo "ascii-check: ${#files[@]} files, surface syntax ASCII-only"
